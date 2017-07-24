@@ -14,7 +14,7 @@ import base64
 import curses
 
 # https://github.com/zlaxy/sshch
-version="0.4"
+version="0.5"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 
@@ -109,6 +109,11 @@ def CMDConnect(aliases, command=False):
 def CMDList(option, opt, value, parser):
     print ', '.join(str(p) for p in conf.sections())
 
+def CMDFullList(option, opt, value, parser):
+    print '\n'.join((str(p) + " - " + conf.get(p, "exec_string") +
+        (" [password]" if conf.has_option(p, "password") else ""))
+        for p in conf.sections())
+
 def CursesConnect(screen, aliases, command=False):
     curses.endwin()
     for alias in aliases:
@@ -116,8 +121,9 @@ def CursesConnect(screen, aliases, command=False):
     print "Press 'enter' to continue."
     screen.getch()
 
-def CursesExit():
+def CursesExit(error=False):
     curses.endwin()
+    if error: print error
     exit()
 
 def CursesTextpadConfirm(value):
@@ -129,7 +135,7 @@ def CursesTextpad(screen, h, w, y, x, title="", value="",
                   text_colorpair=0, deco_colorpair=0):
     new_window = curses.newwin(h + 3, w + 2, y - 1, x - 1)
     title_window = new_window.subwin(1, w , y , x)
-    title_window.addstr(0, 0, title, text_colorpair)
+    title_window.addnstr(0, 0, title, w , text_colorpair)
     title_window.refresh()
     sub_window = new_window.subwin(h, w, y + 1, x)
     textbox_field = textpad.Textbox(sub_window, insert_mode=True)
@@ -137,7 +143,7 @@ def CursesTextpad(screen, h, w, y, x, title="", value="",
     new_window.box()
     new_window.attroff(deco_colorpair)
     new_window.refresh()
-    sub_window.addstr(0, 0 , value, text_colorpair)
+    sub_window.addnstr(0, 0 , value, h * w, text_colorpair)
     sub_window.attron(text_colorpair)
     return textbox_field
 
@@ -148,8 +154,9 @@ def CursesPanel(screen, h, w, y, x, text,
     new_window.attron(deco_colorpair)
     new_window.box()
     new_window.attroff(deco_colorpair)
-    sub_window = new_window.subwin(h - 2, w - 2 , y + 1 , x + 1 )
-    sub_window.addstr(0, 0, text)
+    sub_window = new_window.subwin(h - 2, w - 2 , y + 1 , x + 1)
+    sub_window.insstr(0, 0, text)
+#    sub_window.addnstr(0, 0, text, ((h - 2) * (w - 2) - 1))
     panel = curses.panel.new_panel(new_window)
     curses.panel.update_panels()
     screen.refresh()
@@ -166,15 +173,17 @@ def CursesPanel(screen, h, w, y, x, text,
                 break
             if keych == curses.KEY_BACKSPACE:
                 if position > 2:
-                    sub_window.addstr(1, position - 1, " ",
-                                      text_colorpair)
-                    sub_window.refresh()
-                    position = position - 1
+                    if position == len(hidden_password) + 2:
+                        sub_window.addstr(1, position - 1, "  ",
+                                          text_colorpair)
+                        sub_window.refresh()
+                        position = position - 1
                     hidden_password = hidden_password[0:-1]
-            else:
+            if keych > 31 and keych < 127:
                 hidden_password += curses.keyname(keych)
                 sub_window.addstr(1, position, "*", text_colorpair)
-                position += 1
+                if position < w - 4:
+                    position += 1
                 sub_window.refresh()
         return hidden_password
     elif confirm == "remove":
@@ -206,6 +215,9 @@ def CMDOptions():
                           epilog=epilog)
     opts.add_option('-l', '--list', action = "callback",
         callback=CMDList, help="show list of all existing aliases")
+    opts.add_option('-f', '--fulllist', action = "callback",
+        callback=CMDFullList, help=("show list of all existing " +
+        "aliases with connection strings"))
     opts.add_option('-a', '--add', action="store", type="string",
         dest="add", metavar="alias", default=False,
         help="add new alias for connection string")
@@ -258,7 +270,8 @@ def CursesMain():
     screen.border(0)
     curses.curs_set(0)
     max_row = height - 5
-    screen.addstr(1, 2, "sshch " + version + ", press 'h' for help")
+    screen.addnstr(1, 2, "sshch " + version + ", press 'h' for help",
+                   width - 4)
     box = curses.newwin(max_row + 2, width - 2, 2, 1)
     box.box()
     pages = int(ceil(row_num / max_row))
@@ -266,19 +279,21 @@ def CursesMain():
     page = 1
     for i in range(1, max_row + 1):
         if row_num == 0:
-            box.addstr(1, 1, "There aren't any aliases yet. Press 'a'" +
-                       " to add new one.", highlight_text)
+            box.addnstr(1, 1, "There aren't any aliases yet. Press 'a'" +
+                       " to add new one.", width - 6, highlight_text)
         else:
             if (i == position):
                 box.addnstr(i, 2, "[" + selected_strings[i] + "] " +
                     str(i) + " " + strings[i - 1] + " (" +
-                    conf.get(strings[i - 1], "exec_string") + ")",
-                    width - 6, highlight_text)
+                    conf.get(strings[i - 1], "exec_string") + ")" +
+                    (" [password]" if conf.has_option(strings[i - 1],
+                    "password") else ""), width - 6, highlight_text)
             else:
                 box.addnstr(i, 2, "[" + selected_strings[i] + "] " +
                     str(i) + " " + strings[i - 1] + " (" +
-                    conf.get(strings[i - 1], "exec_string") + ")",
-                    width - 6, normal_text)
+                    conf.get(strings[i - 1], "exec_string") + ")" +
+                    (" [password]" if conf.has_option(strings[i - 1],
+                    "password") else ""), width - 6, normal_text)
             if i == row_num:
                 break
     screen.refresh()
@@ -314,7 +329,7 @@ def CursesMain():
                         add_string = string_textpad.edit(
                             CursesTextpadConfirm)
                     SetAliasString(add_alias.rstrip(),
-                                   add_string.rstrip())
+                        add_string.replace("\n", "").rstrip())
                     strings = conf.sections()
                     row_num = len(strings)
                     selected_strings.append(" ")
@@ -329,7 +344,8 @@ def CursesMain():
                     conf.get(strings[position - 1], "exec_string"),
                     normal_text, highlight_text)
                 edit_string = string_textpad.edit(CursesTextpadConfirm)
-            SetAliasString(strings[position - 1], edit_string.rstrip())
+            SetAliasString(strings[position - 1],
+                edit_string.replace("\n", "").rstrip())
             strings = conf.sections()
         if (key_pressed == ord('p') or key_pressed == ord(
                 'P') or key_pressed == curses.KEY_F6) and row_num != 0:
@@ -379,7 +395,8 @@ def CursesMain():
                 "Enter specific command to execute with selected " +
                 "alias/aliases:", "", normal_text, highlight_text)
             command_string = command_textpad.edit(CursesTextpadConfirm)
-            CursesConnect(screen, selected, command_string.rstrip())
+            CursesConnect(screen, selected,
+                command_string.replace("\n", "").rstrip())
         if (key_pressed == ord("\n") or key_pressed == (
                 curses.KEY_F9)) and row_num != 0:
             selected = []
@@ -389,7 +406,8 @@ def CursesMain():
             if not len(selected) > 0:
                 selected.append(strings[position - 1])
             CursesConnect(screen, selected)
-        if key_pressed == 32 or key_pressed == curses.KEY_IC:
+        if (key_pressed == 32 or key_pressed == (
+                curses.KEY_IC)) and row_num != 0:
             if selected_strings[position] == ' ':
                 selected_strings[position] = '*'
             else: selected_strings[position] = ' '
@@ -454,20 +472,25 @@ def CursesMain():
         for i in range(1 + (max_row * (page - 1)), max_row + 1 +
                        (max_row * (page - 1))):
             if row_num == 0:
-                box.addstr(1, 1, "There aren't any aliases yet. Press" +
-                           " 'a' to add new one.", highlight_text)
+                box.addnstr(1, 1, "There aren't any aliases yet. " +
+                    "Press 'a' to add new one.",  width - 6,
+                    highlight_text)
             else:
                 if (i + (max_row * (page - 1)) == (position +
                     (max_row * (page - 1)))):
                     box.addnstr(i - (max_row * (page - 1)), 2, "[" +
                         selected_strings[i] + "] " + str(i) + " " +
                         strings[i - 1] + " (" + conf.get(strings[i - 1],
-                        "exec_string") + ")", width - 6, highlight_text)
+                        "exec_string") + ")" + (" [password]" if 
+                        conf.has_option(strings[i - 1], "password") else
+                        ""), width - 6, highlight_text)
                 else:
                     box.addnstr(i - (max_row * (page - 1)), 2, "[" +
                         selected_strings[i] + "] " + str(i) + " " +
                         strings[i - 1] + " (" + conf.get(strings[i - 1],
-                        "exec_string") + ")", width - 6, normal_text)
+                        "exec_string") + ")" + (" [password]" if 
+                        conf.has_option(strings[i - 1], "password") else
+                        ""), width - 6, normal_text)
                 if i == row_num:
                     break
         screen.refresh()
@@ -481,6 +504,22 @@ if __name__ == "__main__":
         open(conf_file, 'w')
     conf.read(conf_file)
     if len(argv) > 1:
-        CMDOptions()
+        try:
+            CMDOptions()
+        except KeyboardInterrupt:
+            exit()
+        except ConfigParser.Error:
+            print ("Error: can't parse your config file, please check" +
+                " it manually or make new one")
+            exit()
     else:
-        CursesMain()
+        try:
+            CursesMain()
+        except KeyboardInterrupt:
+            CursesExit()
+        except ConfigParser.NoOptionError:
+            CursesExit("Error: can't parse your config file, please " +
+                "check it manually or make new one")
+        except curses.error:
+            CursesExit("Error: can't show some curses element, maybe " +
+                "your terminal is too small")
