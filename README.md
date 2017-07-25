@@ -1,6 +1,7 @@
 SSH connection manager with curses interface
 ======
 sshch is released under DWTWL 2.5 license
+### Screenshot
 ![sshch](https://raw.githubusercontent.com/zlaxy/sshch/master/sshch_screenshot.png)
 ### Installing
 To install for all users:
