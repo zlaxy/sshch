@@ -7,14 +7,16 @@ from sys import argv
 from math import ceil
 from getpass import getpass
 from optparse import OptionParser
-from curses import textpad
+from curses import textpad, panel
 import ConfigParser
 import subprocess
 import base64
 import curses
+import time
+
 
 # https://github.com/zlaxy/sshch
-version = "0.55"
+version = "0.6"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 
@@ -47,7 +49,6 @@ def RemoveAliases(aliases):
 
 
 def ConnectAlias(alias, command=False):
-    print "Connecting to " + alias + "..."
     exec_string = ""
     if conf.has_option(alias, "password"):
         password = base64.b32decode(base64.b16decode(
@@ -57,9 +58,14 @@ def ConnectAlias(alias, command=False):
     if command:
         exec_string = exec_string + " " + command
     # Variables bellow is newer used
-    subprocess.Popen(exec_string, shell=True)
-    # p.communicate()[0]
-    print "... " + alias + " session finished."
+    subprocess.Popen(exec_string, shell=True).communicate()[0]
+
+def HoldConnection(alias):
+    print "Connecting to " + alias + ". Press CTRL+C to cancel."
+    time.sleep(1)
+    while True:
+        ConnectAlias(alias)
+        time.sleep(5)
 
 
 def CMDAdd(alias):
@@ -113,7 +119,9 @@ def CMDRemove(alias):
 def CMDConnect(aliases, command=False):
     for alias in aliases:
         if conf.has_section(alias):
+            print "Connecting to " + alias + "..."
             ConnectAlias(alias, command)
+            print "... " + alias + " session finished."
         else:
             print "error: '" + alias + "' alias is not exists"
 
@@ -132,7 +140,9 @@ def CMDFullList(option, opt, value, parser):
 def CursesConnect(screen, aliases, command=False):
     curses.endwin()
     for alias in aliases:
+        print "Connecting to " + alias + "..."
         ConnectAlias(alias, command)
+        print "... " + alias + " session finished."
     print "Press 'enter' to continue."
     screen.getch()
 
@@ -176,7 +186,7 @@ def CursesPanel(screen, h, w, y, x, text,
     new_window.attroff(deco_colorpair)
     sub_window = new_window.subwin(h - 2, w - 2, y + 1, x + 1)
     sub_window.insstr(0, 0, text)
-    curses.panel.new_panel(new_window)
+    panel = curses.panel.new_panel(new_window)
     curses.panel.update_panels()
     screen.refresh()
     if confirm == "password":
@@ -245,6 +255,9 @@ def CMDOptions():
     opts.add_option('-c', '--command', action="store", type="string",
                     dest="command", metavar="command", default=False,
                     help="add command for executing alias")
+    opts.add_option('-k', '--keep', action="store", type="string",
+                    dest="keep", metavar="alias", default=False,
+                    help="hold connection with specified alias")
     opts.add_option('-e', '--edit', action="store", type="string",
                     dest='edit', metavar="alias", default=False,
                     help="edit existing connection string")
@@ -263,6 +276,8 @@ def CMDOptions():
         CMDPassword(options.password)
     if options.remove:
         CMDRemove(options.remove)
+    if options.keep:
+        HoldConnection(options.keep)
     if alias:
         CMDConnect(alias, options.command)
 
@@ -278,6 +293,7 @@ def CursesMain():
                             "  'space'/'insert' - select\n",
                             "  'r'/'F8' - remove selected alias/aliases\n",
                             "  'c'/'F3' - execute specific command with selected alias/aliases\n",
+                            "  'k'/'F7' - hold connection with selected alias\n",
                             "  'enter'/'F9' - connect to selected alias/aliases\n",
                             "  'q'/'F10' - quit\n",
                             " Run program with '--help' option to view command line help.\n",
@@ -428,6 +444,10 @@ def CursesMain():
             command_string = command_textpad.edit(CursesTextpadConfirm)
             CursesConnect(screen, selected,
                           command_string.replace("\n", "").rstrip())
+        if (key_pressed == ord('k') or key_pressed == ord('K') or
+                key_pressed == (curses.KEY_F7)) and row_num != 0:
+            curses.endwin()
+            HoldConnection(strings[position - 1])
         if (key_pressed == ord("\n") or key_pressed == (
                 curses.KEY_F9)) and row_num != 0:
             selected = []
