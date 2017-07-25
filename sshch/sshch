@@ -60,6 +60,7 @@ def ConnectAlias(alias, command=False):
     # Variables bellow is newer used
     subprocess.Popen(exec_string, shell=True).communicate()[0]
 
+
 def HoldConnection(alias):
     print "Connecting to " + alias + ". Press CTRL+C to cancel."
     time.sleep(1)
