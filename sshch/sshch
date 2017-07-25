@@ -14,7 +14,7 @@ import base64
 import curses
 
 # https://github.com/zlaxy/sshch
-version="0.5"
+version="0.55"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 
@@ -156,7 +156,6 @@ def CursesPanel(screen, h, w, y, x, text,
     new_window.attroff(deco_colorpair)
     sub_window = new_window.subwin(h - 2, w - 2 , y + 1 , x + 1)
     sub_window.insstr(0, 0, text)
-#    sub_window.addnstr(0, 0, text, ((h - 2) * (w - 2) - 1))
     panel = curses.panel.new_panel(new_window)
     curses.panel.update_panels()
     screen.refresh()
