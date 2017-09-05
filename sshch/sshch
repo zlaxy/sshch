@@ -16,7 +16,7 @@ import time
 
 
 # https://github.com/zlaxy/sshch
-version = "0.6"
+version = "0.7"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 
@@ -53,7 +53,7 @@ def ConnectAlias(alias, command=False):
     if conf.has_option(alias, "password"):
         password = base64.b32decode(base64.b16decode(
             base64.b64decode(conf.get(alias, "password"))))
-        exec_string = "sshpass -p " + password + " "
+        exec_string = 'sshpass -p "' + password + '" '
     exec_string = exec_string + conf.get(alias, "exec_string")
     if command:
         exec_string = exec_string + " " + command
