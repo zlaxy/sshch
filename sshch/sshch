@@ -16,7 +16,7 @@ import time
 
 
 # https://github.com/zlaxy/sshch
-version = "0.7"
+version = "0.8"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 
@@ -54,7 +54,8 @@ def ConnectAlias(alias, command=False):
         password = base64.b32decode(base64.b16decode(
             base64.b64decode(conf.get(alias, "password"))))
         exec_string = 'sshpass -p "' + password + '" '
-    exec_string = exec_string + conf.get(alias, "exec_string")
+    if conf.has_option(alias, "exec_string"):
+        exec_string = exec_string + conf.get(alias, "exec_string")
     if command:
         exec_string = exec_string + " " + command
     # Variables bellow is newer used
@@ -133,8 +134,9 @@ def CMDList(option, opt, value, parser):
 
 def CMDFullList(option, opt, value, parser):
     for p in conf.sections():
-        to_print = "".join([str(p), " - ", conf.get(p, "exec_string"),
-                            (" [password]" if conf.has_option(p, "password") else ""), "\n"])
+        to_print = "".join([str(p), " - ", (conf.get(p, "exec_string") if 
+                            conf.has_option(p, "exec_string") else ""),
+                            (" [password]" if conf.has_option(p, "password") else "")])
         print(to_print)
 
 
@@ -332,8 +334,9 @@ def CursesMain():
             else:
                 password = ""
             exec_string = ["[", selected_strings[i], "] ", str(i), " ",
-                           strings[i - 1], " (", conf.get(strings[i - 1], "exec_string"),
-                           ")", password]
+                           strings[i - 1], " (", (conf.get(strings[i - 1],
+                           "exec_string") if conf.has_option(strings[i - 1],
+                           "exec_string") else ""), ")", password]
             if (i == position):
                 box.addnstr(i, 2, "".join(exec_string), width - 6, highlight_text)
             else:
@@ -386,7 +389,9 @@ def CursesMain():
             while edit_string.rstrip() == "":
                 string_textpad = CursesTextpad(screen, 3, width - 8,
                                                (height // 2) - 1, 4, "Enter new execution string:",
-                                               conf.get(strings[position - 1], "exec_string"),
+                                               (conf.get(strings[position - 1],
+                                               "exec_string") if conf.has_option(strings[position - 1],
+                                               "exec_string") else ""),
                                                normal_text, highlight_text)
                 edit_string = string_textpad.edit(CursesTextpadConfirm)
             SetAliasString(strings[position - 1],
@@ -533,8 +538,9 @@ def CursesMain():
                 else:
                     password = ""
                 exec_string = ["[", selected_strings[i], "] ", str(i), " ",
-                               strings[i - 1], " (", conf.get(strings[i - 1], "exec_string"),
-                               ")", password]
+                               strings[i - 1], " (", (conf.get(strings[i - 1],
+                               "exec_string") if conf.has_option(strings[i - 1],
+                               "exec_string") else ""), ")", password]
                 if (i + (max_row * (page - 1)) == (position + (max_row * (page - 1)))):
                     box.addnstr(i - (max_row * (page - 1)), 2, "".join(
                         exec_string), width - 6, highlight_text)
