@@ -23,6 +23,7 @@ To run command line help:
 sshch -h
 ```
 **If you want to use unsafe 'password' feature you must install 'sshpass' first.**
+
 If you want to use bash autocompletion function with sshch, copy autocompletion script to /etc/bash_completion.d/:
 ```
 sudo cp sshch_bash_completion.sh /etc/bash_completion.d/sshch
