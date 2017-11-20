@@ -1,22 +1,26 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from __future__ import division
+from __future__ import print_function
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser  # Python 2.x import
+
 from os import path
 from sys import argv
 from math import ceil
 from getpass import getpass
 from optparse import OptionParser
-from curses import textpad, panel
-import ConfigParser
 import subprocess
 import base64
-import curses
 import time
-
+import curses
+from curses import textpad, panel
 
 # https://github.com/zlaxy/sshch
-version = "0.8"
+version = "0.9"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 
@@ -63,7 +67,7 @@ def ConnectAlias(alias, command=False):
 
 
 def HoldConnection(alias):
-    print "Connecting to " + alias + ". Press CTRL+C to cancel."
+    print("Connecting to " + alias + ". Press CTRL+C to cancel.")
     time.sleep(1)
     while True:
         ConnectAlias(alias)
@@ -77,10 +81,10 @@ def CMDAdd(alias):
                                "(example: ssh user@somehost.com):\n"]))
         string = ""
         while string == "":
-            string = raw_input(prompt_add)
+            string = input(prompt_add)
         SetAliasString(alias, string)
     else:
-        print result
+        print(result)
 
 
 def CMDEdit(alias):
@@ -89,10 +93,10 @@ def CMDEdit(alias):
                        "(example: ssh user@somehost.com):\n"]))
         string = ""
         while string == "":
-            string = raw_input(prompt_edit)
+            string = input(prompt_edit)
         SetAliasString(alias, string)
     else:
-        print "error: '" + alias + "' alias is not exists"
+        print("error: '" + alias + "' alias is not exists")
 
 
 def CMDPassword(alias):
@@ -103,38 +107,38 @@ def CMDPassword(alias):
         if not string == "":
             SetPassword(alias, string)
     else:
-        print "error: '" + alias + "' alias is not exists"
+        print("error: '" + alias + "' alias is not exists")
 
 
 def CMDRemove(alias):
     if conf.has_section(alias):
         prompt_remove = ("Type 'yes' if you sure to remove '" + alias + "' alias: ")
-        string = raw_input(prompt_remove)
+        string = input(prompt_remove)
         if string == "yes":
             RemoveAliases([alias])
         else:
-            print "'" + alias + "' alias was not deleted."
+            print("'" + alias + "' alias was not deleted.")
     else:
-        print "error: '" + alias + "' alias is not exists."
+        print("error: '" + alias + "' alias is not exists.")
 
 
 def CMDConnect(aliases, command=False):
     for alias in aliases:
         if conf.has_section(alias):
-            print "Connecting to " + alias + "..."
+            print("Connecting to " + alias + "...")
             ConnectAlias(alias, command)
-            print "... " + alias + " session finished."
+            print("... " + alias + " session finished.")
         else:
-            print "error: '" + alias + "' alias is not exists"
+            print("error: '" + alias + "' alias is not exists")
 
 
 def CMDList(option, opt, value, parser):
-    print ', '.join(str(p) for p in conf.sections())
+    print(', '.join(str(p) for p in conf.sections()))
 
 
 def CMDFullList(option, opt, value, parser):
     for p in conf.sections():
-        to_print = "".join([str(p), " - ", (conf.get(p, "exec_string") if 
+        to_print = "".join([str(p), " - ", (conf.get(p, "exec_string") if
                             conf.has_option(p, "exec_string") else ""),
                             (" [password]" if conf.has_option(p, "password") else "")])
         print(to_print)
@@ -143,17 +147,17 @@ def CMDFullList(option, opt, value, parser):
 def CursesConnect(screen, aliases, command=False):
     curses.endwin()
     for alias in aliases:
-        print "Connecting to " + alias + "..."
+        print("Connecting to " + alias + "...")
         ConnectAlias(alias, command)
-        print "... " + alias + " session finished."
-    print "Press 'enter' to continue."
+        print("... " + alias + " session finished.")
+    print("Press 'enter' to continue.")
     screen.getch()
 
 
 def CursesExit(error=False):
     curses.endwin()
     if error:
-        print error
+        print(error)
     exit()
 
 
@@ -556,7 +560,12 @@ def CursesMain():
 
 
 if __name__ == "__main__":
-    conf = ConfigParser.RawConfigParser()
+    try:
+        input = raw_input   # Fix for Python 2.x
+    except NameError:
+        pass
+
+    conf = configparser.RawConfigParser()
     if not path.exists(conf_file):
         open(conf_file, 'w')
     conf.read(conf_file)
@@ -565,15 +574,15 @@ if __name__ == "__main__":
             CMDOptions()
         except KeyboardInterrupt:
             exit()
-        except ConfigParser.Error:
-            print ("Error: can't parse your config file, please check it manually or make new one")
+        except configparser.Error:
+            print("Error: can't parse your config file, please check it manually or make new one")
             exit()
     else:
         try:
             CursesMain()
         except KeyboardInterrupt:
             CursesExit()
-        except ConfigParser.NoOptionError:
+        except configparser.NoOptionError:
             CursesExit("".join(["Error: can't parse your config file, please ",
                        "check it manually or make new one"]))
         except curses.error:
