@@ -133,7 +133,7 @@ def CMDConnect(aliases, command=False):
 
 
 def CMDList(option, opt, value, parser):
-    print(', '.join(str(p) for p in conf.sections()))
+    print(' '.join(str(p) for p in conf.sections()))
 
 
 def CMDFullList(option, opt, value, parser):
