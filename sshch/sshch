@@ -517,7 +517,7 @@ def CursesMain():
                 'G') or key_pressed == curses.KEY_F5:
             curses.curs_set(1)
             new_group_textpad = CursesTextpad(screen, 1, width - 8,
-                                              (height // 2) - 1, 4, "Enter alias name for new group:", "",
+                                              (height // 2) - 1, 4, "Enter group name (without spaces):", "",
                                               normal_text, highlight_text)
             add_group = new_group_textpad.edit(CursesTextpadConfirm)
             if not add_group.rstrip() == "":
