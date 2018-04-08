@@ -20,7 +20,7 @@ import curses
 from curses import textpad, panel
 
 # https://github.com/zlaxy/sshch
-version = "0.993"
+version = "0.994"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 # expand groups by default
@@ -28,12 +28,13 @@ expand_default = False
 
 
 def AddNewAlias(alias):
+    alias = alias.split()[0].strip()
     if not conf.has_section(alias):
         conf.add_section(alias)
         conf.write(open(conf_file, "w"))
         return True
     else:
-        return "error: '" + alias + "' already exists"
+        return "error: '" + alias + "' alias or group already exists"
 
 
 def SetAliasString(alias, string):
@@ -90,7 +91,7 @@ def HoldConnection(alias):
 
 def CMDAdd(alias):
     result = AddNewAlias(alias)
-    if result:
+    if result == True:
         prompt_add = ("".join(["Enter connection string for new alias ",
                                "(example: ssh user@somehost.com):\n"]))
         string = ""
@@ -103,7 +104,7 @@ def CMDAdd(alias):
 
 def CMDGroup(group):
     result = AddNewAlias(group)
-    if result:
+    if result == True:
         prompt_add = ("".join(["Enter aliases for new group ",
                                "(example: alias1 alias2):\n"]))
         string = ""
@@ -489,11 +490,7 @@ def CursesMain():
             add_alias = new_alias_textpad.edit(CursesTextpadConfirm)
             if not add_alias.rstrip() == "":
                 add_result = AddNewAlias(add_alias.rstrip())
-                if not add_result:
-                    CursesPanel(screen, 3,
-                                width - 6, (height // 2) - 1, 3, add_result,
-                                normal_text, highlight_text)
-                else:
+                if add_result == True:
                     add_string = ""
                     while add_string.rstrip() == "":
                         string_textpad = CursesTextpad(screen, 3,
@@ -510,6 +507,11 @@ def CursesMain():
                     selected_strings.append(" ")
                     pages = int(ceil(row_num / max_row))
                     box.refresh()
+                else:
+                    curses.curs_set(0)
+                    CursesPanel(screen, 3,
+                                width - 6, (height // 2) - 1, 3, add_result,
+                                normal_text, highlight_text)
             curses.curs_set(0)
         if key_pressed == ord('g') or key_pressed == ord(
                 'G') or key_pressed == curses.KEY_F5:
@@ -520,11 +522,7 @@ def CursesMain():
             add_group = new_group_textpad.edit(CursesTextpadConfirm)
             if not add_group.rstrip() == "":
                 add_result = AddNewAlias(add_group.rstrip())
-                if not add_result:
-                    CursesPanel(screen, 3,
-                                width - 6, (height // 2) - 1, 3, add_result,
-                                normal_text, highlight_text)
-                else:
+                if add_result == True:
                     add_string = ""
                     while add_string.rstrip() == "":
                         string_textpad = CursesTextpad(screen, 3,
@@ -542,6 +540,11 @@ def CursesMain():
                     selected_strings = [" " for i in range(0, row_num + 1)]
                     pages = int(ceil(row_num / max_row))
                     box.refresh()
+                else:
+                    curses.curs_set(0)
+                    CursesPanel(screen, 3,
+                                width - 6, (height // 2) - 1, 3, add_result,
+                                normal_text, highlight_text)
             curses.curs_set(0)
         if (key_pressed == ord('e') or key_pressed == ord(
                 'E') or key_pressed == curses.KEY_F4) and row_num != 0:

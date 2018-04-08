@@ -10,7 +10,7 @@ def main():
           url='https://github.com/zlaxy/sshch/',
           description='Ssh connection manager',
           license='DWTWL 2.5',
-          version='0.993',
+          version='0.994',
           py_modules=['sshch'],
           scripts=['sshch/sshch'],
 
