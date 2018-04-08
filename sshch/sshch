@@ -482,6 +482,7 @@ def CursesMain():
                         help_screen, normal_text, highlight_text)
         if key_pressed == ord('a') or key_pressed == ord(
                 'A') or key_pressed == curses.KEY_F2:
+            curses.curs_set(1)
             new_alias_textpad = CursesTextpad(screen, 1, width - 8,
                                               (height // 2) - 1, 4, "Enter new alias:", "",
                                               normal_text, highlight_text)
@@ -509,8 +510,10 @@ def CursesMain():
                     selected_strings.append(" ")
                     pages = int(ceil(row_num / max_row))
                     box.refresh()
+            curses.curs_set(0)
         if key_pressed == ord('g') or key_pressed == ord(
                 'G') or key_pressed == curses.KEY_F5:
+            curses.curs_set(1)
             new_group_textpad = CursesTextpad(screen, 1, width - 8,
                                               (height // 2) - 1, 4, "Enter name for new group:", "",
                                               normal_text, highlight_text)
@@ -539,6 +542,7 @@ def CursesMain():
                     selected_strings = [" " for i in range(0, row_num + 1)]
                     pages = int(ceil(row_num / max_row))
                     box.refresh()
+            curses.curs_set(0)
         if (key_pressed == ord('e') or key_pressed == ord(
                 'E') or key_pressed == curses.KEY_F4) and row_num != 0:
             edit_string = ""
@@ -546,6 +550,7 @@ def CursesMain():
             for a in conf.sections():
                 if conf.has_option(a, "group"):
                     groups.append(a)
+            curses.curs_set(1)
             if strings[position - 1] in groups:
                 while edit_string.rstrip() == "":
                     string_textpad = CursesTextpad(screen, 3, width - 8,
@@ -576,6 +581,7 @@ def CursesMain():
                                edit_string.replace("\n", "").rstrip())
                 strings = GetTreeList(False, expanded)
                 stringsfull = GetTreeList(True, expanded)
+            curses.curs_set(0)
         if (key_pressed == ord('p') or key_pressed == ord(
                 'P') or key_pressed == curses.KEY_F6) and row_num != 0:
             groups = []
@@ -628,6 +634,7 @@ def CursesMain():
                     selected.append(strings[i - 1])
             if not len(selected) > 0:
                 selected.append(strings[position - 1].split()[0].strip())
+            curses.curs_set(1)
             command_textpad = CursesTextpad(screen, 3, width - 8,
                                             (height // 2) - 1, 4,
                                             "".join([
@@ -637,6 +644,7 @@ def CursesMain():
             command_string = command_textpad.edit(CursesTextpadConfirm)
             CursesConnect(screen, selected,
                           command_string.replace("\n", "").rstrip())
+            curses.curs_set(0)
         if (key_pressed == ord('k') or key_pressed == ord('K') or
                 key_pressed == (curses.KEY_F7)) and row_num != 0:
             groups = []
