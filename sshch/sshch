@@ -20,15 +20,14 @@ import curses
 from curses import textpad, panel
 
 # https://github.com/zlaxy/sshch
-version = "0.995"
+version = "0.997"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 # expand groups by default
-expand_default = False
+expand_default = True
 
 
 def AddNewAlias(alias):
-    alias = alias.split()[0].strip()
     if not conf.has_section(alias):
         conf.add_section(alias)
         conf.write(open(conf_file, "w"))
@@ -90,6 +89,7 @@ def HoldConnection(alias):
 
 
 def CMDAdd(alias):
+    alias = alias.split()[0].strip()
     result = AddNewAlias(alias)
     if result == True:
         prompt_add = ("".join(["Enter connection string for new alias ",
@@ -103,6 +103,7 @@ def CMDAdd(alias):
 
 
 def CMDGroup(group):
+    group = group.split()[0].strip()
     result = AddNewAlias(group)
     if result == True:
         prompt_add = ("".join(["Enter aliases for new group ",
@@ -374,7 +375,7 @@ def CMDOptions():
                     help="add new group for aliases")
     opts.add_option('-c', '--command', action="store", type="string",
                     dest="command", metavar="command", default=False,
-                    help="execute command for executing aliases or group")
+                    help="execute command for aliases or group")
     opts.add_option('-k', '--keep', action="store", type="string",
                     dest="keep", metavar="alias", default=False,
                     help="hold connection with specified alias")
@@ -409,8 +410,8 @@ def CMDOptions():
 def CursesMain():
     help_screen = ("".join([" Press:\n",
                             "  'z'/'x' or arrows - navigation\n",
-                            "  'a'/'F2' - add new alias\n",
-                            "  'g'/'F5' - add new group\n",
+                            "  'a'/'F2' - add new alias (without spaces)\n",
+                            "  'g'/'F5' - add new group (spaces will be stripped)\n",
                             "  'e'/'F4' - edit existing alias/group\n",
                             "  'p'/'F6' - set alias's password for sshpass [UNSAFE]\n",
                             "  'space'/'insert' - select\n",
@@ -488,18 +489,19 @@ def CursesMain():
                                               (height // 2) - 1, 4, "Enter new alias:", "",
                                               normal_text, highlight_text)
             add_alias = new_alias_textpad.edit(CursesTextpadConfirm)
-            if not add_alias.rstrip() == "":
-                add_result = AddNewAlias(add_alias.rstrip())
+            add_alias = add_alias.split()[0].strip()
+            if not add_alias == "":
+                add_result = AddNewAlias(add_alias)
                 if add_result == True:
                     add_string = ""
-                    while add_string.rstrip() == "":
+                    while add_string == "":
                         string_textpad = CursesTextpad(screen, 3,
                                                        width - 8, (height // 2) - 1, 4,
                                                        "Enter full execution string:",
                                                        "ssh ", normal_text, highlight_text)
                         add_string = string_textpad.edit(
                             CursesTextpadConfirm)
-                    SetAliasString(add_alias.rstrip(),
+                    SetAliasString(add_alias,
                                    add_string.replace("\n", "").rstrip())
                     strings = GetTreeList(False, expanded)
                     stringsfull = GetTreeList(True, expanded)
@@ -520,8 +522,9 @@ def CursesMain():
                                               (height // 2) - 1, 4, "Enter group name (without spaces):", "",
                                               normal_text, highlight_text)
             add_group = new_group_textpad.edit(CursesTextpadConfirm)
-            if not add_group.rstrip() == "":
-                add_result = AddNewAlias(add_group.rstrip())
+            add_group = add_group.split()[0].strip()
+            if not add_group == "":
+                add_result = AddNewAlias(add_group)
                 if add_result == True:
                     add_string = ""
                     while add_string.rstrip() == "":
@@ -531,9 +534,9 @@ def CursesMain():
                                                        "", normal_text, highlight_text)
                         add_string = string_textpad.edit(
                             CursesTextpadConfirm)
-                    SetGroupString(add_group.rstrip(),
+                    SetGroupString(add_group,
                                    add_string.replace("\n", "").rstrip())
-                    expanded.append(add_group.rstrip())
+                    expanded.append(add_group)
                     strings = GetTreeList(False, expanded)
                     stringsfull = GetTreeList(True, expanded)
                     row_num = len(strings)
@@ -744,6 +747,12 @@ def CursesMain():
             if page < pages:
                 page = page + 1
                 position = (1 + (max_row * (page - 1)))
+        if key_pressed == curses.KEY_HOME:
+                page = 1
+                position = 1
+        if key_pressed == curses.KEY_END:
+                page = pages
+                position = row_num
         box.erase()
         screen.border(0)
         box.border(0)

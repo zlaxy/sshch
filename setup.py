@@ -9,8 +9,8 @@ def main():
           author='zlaxy',
           url='https://github.com/zlaxy/sshch/',
           description='Ssh connection manager',
-          license='DWTWL 2.5',
-          version='0.995',
+          license='DWTWL 2.55',
+          version='0.997',
           py_modules=['sshch'],
           scripts=['sshch/sshch'],
 
