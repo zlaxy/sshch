@@ -20,7 +20,7 @@ import curses
 from curses import textpad, panel
 
 # https://github.com/zlaxy/sshch
-version = "0.997"
+version = "0.998"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 # expand groups by default
@@ -327,7 +327,7 @@ def CursesPanel(screen, h, w, y, x, text,
                         position = position - 1
                     hidden_password = hidden_password[0:-1]
             if keych > 31 and keych < 127:
-                hidden_password += curses.keyname(keych)
+                hidden_password += curses.keyname(keych).decode('utf-8')
                 sub_window.addstr(1, position, "*", text_colorpair)
                 if position < w - 4:
                     position += 1
