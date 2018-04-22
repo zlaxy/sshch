@@ -20,7 +20,7 @@ import curses
 from curses import textpad, panel
 
 # https://github.com/zlaxy/sshch
-version = "0.998"
+version = "0.999"
 # path to conf file, default: ~/.config/sshch.conf
 conf_file = path.expanduser("~") + '/.config/sshch.conf'
 # expand groups by default
@@ -47,9 +47,14 @@ def SetGroupString(alias, string):
 
 
 def SetPassword(alias, string):
-    string = base64.b64encode(base64.b16encode(
-                              base64.b32encode(string)))
-    conf.set(alias, "password", string)
+    if string == "" or string == b'':
+        conf.remove_option(alias, "password")
+    else:
+        string = string.encode()
+        string = base64.b64encode(base64.b16encode(
+                                  base64.b32encode(string)))
+        string = string.decode('utf-8')
+        conf.set(alias, "password", string)
     conf.write(open(conf_file, "w"))
 
 
@@ -64,7 +69,7 @@ def ConnectAlias(alias, command=False):
     if conf.has_option(alias, "password"):
         password = base64.b32decode(base64.b16decode(
                                     base64.b64decode(conf.get(alias, "password"))))
-        exec_string = 'sshpass -p "' + password + '" '
+        exec_string = 'sshpass -p "' + password.decode('utf-8') + '" '
     if conf.has_option(alias, "exec_string"):
         exec_string = exec_string + conf.get(alias, "exec_string")
     if command:
@@ -118,7 +123,7 @@ def CMDGroup(group):
 
 def CMDEdit(alias):
     if conf.has_section(alias):
-        if conf.has_option(alias, "string"):
+        if conf.has_option(alias, "exec_string"):
             prompt_edit = ("".join(["Enter connection string for existing alias ",
                            "(example: ssh user@somehost.com):\n"]))
             string = ""
@@ -148,11 +153,10 @@ def CMDPassword(alias):
         print("Can't set password for group.")
     else:
         if conf.has_section(alias):
-            prompt_pass = ("[UNSAFE] Enter password for sshpass: ")
+            prompt_pass = ("[UNSAFE] Enter password for sshpass (Ctrl+C - cancel, blank - clear password):\n")
             string = ""
             string = getpass(prompt_pass)
-            if not string == "":
-                SetPassword(alias, string)
+            SetPassword(alias, string)
         else:
             print("error: '" + alias + "' alias does not exists")
 
@@ -600,8 +604,7 @@ def CursesMain():
                                            (height // 2) - 1, 3,
                                            " Enter user password for sshpass and press 'enter':\n>",
                                            normal_text, highlight_text, "password")
-                if not set_password == "":
-                    SetPassword(strings[position - 1].split()[0].strip(), set_password)
+                SetPassword(strings[position - 1].split()[0].strip(), set_password)
                 strings = GetTreeList(False, expanded)
                 stringsfull = GetTreeList(True, expanded)
         if (key_pressed == ord('r') or key_pressed == ord(
