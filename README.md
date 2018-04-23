@@ -11,6 +11,7 @@ sshch compatible with pyhon2 and python3, no additional libraries are required
 pip install sshch
 ```
 **Manual installation from the package or git repository also available:**
+
 To install for all users:
 ```bash
 sudo python setup.py install
@@ -30,6 +31,7 @@ To run command line help:
 sshch -h
 ```
 For exit from current ssh session press `Ctrl+D`.
+
 **Additional Features**
 - If you want to use unsafe 'password' feature you must install `sshpass` first.
 - If you want to use bash autocompletion function with sshch, copy autocompletion script to /etc/bash_completion.d/:
@@ -39,6 +41,8 @@ sudo cp completion/sshch_bash_completion.sh /etc/bash_completion.d/sshch
 (changes will come into effect with new bash session)
 - If you want to use zsh autocompletion:
 1) Place File in a Directory where ZSH can find it
+
      -> Search Path is Stored in $fpath
+
      -> echo $fpath
 2) Rename File to '_sshch'
