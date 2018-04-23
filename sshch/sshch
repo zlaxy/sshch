@@ -1,0 +1,811 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from __future__ import division
+from __future__ import print_function
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser  # Python 2.x import
+
+from os import path
+from sys import argv
+from math import ceil
+from getpass import getpass
+from optparse import OptionParser
+import subprocess
+import base64
+import time
+import curses
+from curses import textpad, panel
+
+# https://github.com/zlaxy/sshch
+version = "1.0"
+# path to conf file, default: ~/.config/sshch.conf
+conf_file = path.expanduser("~") + '/.config/sshch.conf'
+# expand groups by default
+expand_default = True
+
+
+def AddNewAlias(alias):
+    if not conf.has_section(alias):
+        conf.add_section(alias)
+        conf.write(open(conf_file, "w"))
+        return True
+    else:
+        return "error: '" + alias + "' alias or group already exists"
+
+
+def SetAliasString(alias, string):
+    conf.set(alias, "exec_string", string)
+    conf.write(open(conf_file, "w"))
+
+
+def SetGroupString(alias, string):
+    conf.set(alias, "group", string)
+    conf.write(open(conf_file, "w"))
+
+
+def SetPassword(alias, string):
+    if string == "" or string == b'':
+        conf.remove_option(alias, "password")
+    else:
+        string = string.encode()
+        string = base64.b64encode(base64.b16encode(
+                                  base64.b32encode(string)))
+        string = string.decode('utf-8')
+        conf.set(alias, "password", string)
+    conf.write(open(conf_file, "w"))
+
+
+def RemoveAliases(aliases):
+    for alias in aliases:
+        conf.remove_section(alias)
+        conf.write(open(conf_file, "w"))
+
+
+def ConnectAlias(alias, command=False):
+    exec_string = ""
+    if conf.has_option(alias, "password"):
+        password = base64.b32decode(base64.b16decode(
+                                    base64.b64decode(conf.get(alias, "password"))))
+        exec_string = 'sshpass -p "' + password.decode('utf-8') + '" '
+    if conf.has_option(alias, "exec_string"):
+        exec_string = exec_string + conf.get(alias, "exec_string")
+    if command:
+        exec_string = exec_string + " " + command
+    subprocess.Popen(exec_string, shell=True).communicate()[0]
+
+
+def HoldConnection(alias):
+    groups = []
+    connectaliases = []
+    for a in conf.sections():
+        if conf.has_option(a, "group"):
+            groups.append(a)
+    if alias in groups:
+        print("Can't hold connection with group.")
+    else:
+        print("Connecting to " + alias + ". Press CTRL+C to cancel.")
+        time.sleep(1)
+        while True:
+            ConnectAlias(alias)
+            time.sleep(5)
+
+
+def CMDAdd(alias):
+    alias = alias.split()[0].strip()
+    result = AddNewAlias(alias)
+    if result == True:
+        prompt_add = ("".join(["Enter connection string for new alias ",
+                               "(example: ssh user@somehost.com):\n"]))
+        string = ""
+        while string == "":
+            string = input(prompt_add)
+        SetAliasString(alias, string)
+    else:
+        print(result)
+
+
+def CMDGroup(group):
+    group = group.split()[0].strip()
+    result = AddNewAlias(group)
+    if result == True:
+        prompt_add = ("".join(["Enter aliases for new group ",
+                               "(example: alias1 alias2):\n"]))
+        string = ""
+        while string == "":
+            string = input(prompt_add)
+        SetGroupString(group, string)
+    else:
+        print(result)
+
+
+def CMDEdit(alias):
+    if conf.has_section(alias):
+        if conf.has_option(alias, "exec_string"):
+            prompt_edit = ("".join(["Enter connection string for existing alias ",
+                           "(example: ssh user@somehost.com):\n"]))
+            string = ""
+            while string == "":
+                string = input(prompt_edit)
+            SetAliasString(alias, string)
+        elif conf.has_option(alias, "group"):
+            prompt_edit = ("".join(["Enter aliases for existing group ",
+                           "(example: alias1 alias2):\n"]))
+            string = ""
+            while string == "":
+                string = input(prompt_edit)
+            SetGroupString(alias, string)
+        else:
+            print("error: '" + alias + "' is not correct alias or group")
+    else:
+        print("error: '" + alias + "' alias or group does not exists")
+
+
+def CMDPassword(alias):
+    groups = []
+    connectaliases = []
+    for a in conf.sections():
+        if conf.has_option(a, "group"):
+            groups.append(a)
+    if alias in groups:
+        print("Can't set password for group.")
+    else:
+        if conf.has_section(alias):
+            prompt_pass = ("[UNSAFE] Enter password for sshpass (Ctrl+C - cancel, blank - clear password):\n")
+            string = ""
+            string = getpass(prompt_pass)
+            SetPassword(alias, string)
+        else:
+            print("error: '" + alias + "' alias does not exists")
+
+
+def CMDRemove(alias):
+    if conf.has_section(alias):
+        prompt_remove = ("Type 'yes' if you sure to remove '" + alias + "' alias or group: ")
+        string = input(prompt_remove)
+        if string == "yes":
+            RemoveAliases([alias])
+        else:
+            print("'" + alias + "' alias or group was not deleted.")
+    else:
+        print("error: '" + alias + "' alias or group does not exists.")
+
+
+def CMDConnect(aliases, command=False):
+    groups = []
+    connectaliases = []
+    for a in conf.sections():
+        if conf.has_option(a, "group"):
+            groups.append(a)
+    for alias in aliases:
+        if alias in groups:
+            group_aliases = conf.get(alias, "group").split()
+            for ga in group_aliases:
+                if not ga in connectaliases:
+                    connectaliases.append(ga)
+        else:
+            if not alias in connectaliases:
+                connectaliases.append(alias)
+    for alias in connectaliases:
+        if conf.has_section(alias):
+            print("Connecting to " + alias + "...")
+            ConnectAlias(alias, command)
+            print("... " + alias + " session finished.")
+        else:
+            print("error: '" + alias + "' alias does not exists")
+
+
+def CMDList(option, opt, value, parser):
+    print(' '.join(str(p) for p in conf.sections()))
+
+
+def GetTreeList(strings=True, expandlist=True):
+    aliases = []
+    groups = []
+    resultalias = []
+    resultstring = []
+    for a in conf.sections():
+        if conf.has_option(a, "group"):
+            groups.append(a)
+        elif conf.has_option(a, "exec_string"):
+            aliases.append(a)
+    for g in groups:
+        resultalias.append(g)
+        resultstring.append(">> "+g)
+        group_aliases = conf.get(g, "group").split()
+        for ga in group_aliases:
+            if expandlist == False:
+                pass
+            elif expandlist == True or g in expandlist:
+                if conf.has_option(ga, "exec_string"):
+                    resultalias.append(ga+" "+g)
+                    result = "".join(["  ", str(ga), " (", (conf.get(ga, "exec_string") if
+                            conf.has_option(ga, "exec_string") else ""), ")",
+                            (" [password]" if conf.has_option(ga, "password") else "")])
+                    resultstring.append(result)
+            try:
+                aliases.remove(ga)
+            except ValueError:
+                pass
+    for a in aliases:
+        resultalias.append(a)
+        result = "".join([str(a), " (", (conf.get(a, "exec_string") if
+                conf.has_option(a, "exec_string") else ""), ")",
+                (" [password]" if conf.has_option(a, "password") else "")])
+        resultstring.append(result)
+    if strings:
+        return resultstring;
+    else:
+        return resultalias;
+
+def CMDFullList(option, opt, value, parser):
+    for p in GetTreeList():
+        print (p)
+
+
+def CursesConnect(screen, aliases, command=False):
+    curses.endwin()
+    groups = []
+    connectaliases = []
+    for a in conf.sections():
+        if conf.has_option(a, "group"):
+            groups.append(a)
+    for alias in aliases:
+        if alias in groups:
+            group_aliases = conf.get(alias, "group").split()
+            for ga in group_aliases:
+                if not ga in connectaliases:
+                    connectaliases.append(ga)
+        else:
+            if not alias in connectaliases:
+                connectaliases.append(alias)
+    for alias in connectaliases:
+        print("Connecting to " + alias + "...")
+        ConnectAlias(alias, command)
+        print("... " + alias + " session finished.")
+    print("Press 'enter' to continue.")
+    screen.getch()
+
+
+def CursesExit(error=False):
+    curses.endwin()
+    if error:
+        print(error)
+    exit()
+
+
+def CursesTextpadConfirm(value):
+    if value == 10:
+        value = 7
+    return value
+
+
+def CursesTextpad(screen, h, w, y, x, title="", value="",
+                  text_colorpair=0, deco_colorpair=0):
+    new_window = curses.newwin(h + 3, w + 2, y - 1, x - 1)
+    title_window = new_window.subwin(1, w, y, x)
+    title_window.addnstr(0, 0, title, w, text_colorpair)
+    title_window.refresh()
+    sub_window = new_window.subwin(h, w, y + 1, x)
+    textbox_field = textpad.Textbox(sub_window, insert_mode=True)
+    new_window.attron(deco_colorpair)
+    new_window.box()
+    new_window.attroff(deco_colorpair)
+    new_window.refresh()
+    sub_window.addnstr(0, 0, value, h * w, text_colorpair)
+    sub_window.attron(text_colorpair)
+    return textbox_field
+
+
+def CursesPanel(screen, h, w, y, x, text,
+                text_colorpair=0, deco_colorpair=0, confirm=0):
+    new_window = curses.newwin(h, w, y, x)
+    new_window.erase()
+    new_window.attron(deco_colorpair)
+    new_window.box()
+    new_window.attroff(deco_colorpair)
+    sub_window = new_window.subwin(h - 2, w - 2, y + 1, x + 1)
+    sub_window.insstr(0, 0, text)
+    panel = curses.panel.new_panel(new_window)
+    curses.panel.update_panels()
+    screen.refresh()
+    if confirm == "password":
+        hidden_password = ""
+        keych = ""
+        position = 2
+        while True:
+            keych = screen.getch()
+            if keych == ord("\n"):
+                break
+            if keych == 27:
+                hidden_password = ""
+                break
+            if keych == curses.KEY_BACKSPACE:
+                if position > 2:
+                    if position == len(hidden_password) + 2:
+                        sub_window.addstr(1, position - 1, "  ",
+                                          text_colorpair)
+                        sub_window.refresh()
+                        position = position - 1
+                    hidden_password = hidden_password[0:-1]
+            if keych > 31 and keych < 127:
+                hidden_password += curses.keyname(keych).decode('utf-8')
+                sub_window.addstr(1, position, "*", text_colorpair)
+                if position < w - 4:
+                    position += 1
+                sub_window.refresh()
+        return hidden_password
+    elif confirm == "remove":
+        keych = screen.getch()
+        if keych == ord("y") or keych == ord("Y"):
+            return "confirm"
+        return False
+    else:
+        screen.getch()
+
+
+def CMDOptions():
+    class FormatedParser(OptionParser):
+
+        def format_epilog(self, formatter):
+            return self.epilog
+    usage = "usage: %prog [options] [aliases]"
+    progname = path.basename(__file__)
+    epilog = ("".join(["Examples:\n  ",
+                       progname, " existingalias\n  ",
+                       progname, " -a newremoteserver\n  ",
+                       progname, " --edit=newremoteserver -p newremoteserver\n  ",
+                       progname, ' -c "ls -l" newremoteserver\n  ',
+                       progname, " -c reboot existingalias newremoteserver\n",
+                       "Examples of connection string:\n  ",
+                       "ssh user@somehost.com\n  ",
+                       "ssh gates@8.8.8.8 -p 667\n  ",
+                       "ssh root@somehost.com -t tmux a\n",
+                       "Also, you can edit config file manually: ", conf_file, "\n"]))
+    opts = FormatedParser(usage=usage, version="%prog " + version,
+                          epilog=epilog)
+    opts.add_option('-l', '--list', action="callback",
+                    callback=CMDList, help="show list of all existing aliases")
+    opts.add_option('-f', '--fulllist', action="callback",
+                    callback=CMDFullList, help=("show list of all existing " +
+                                                "aliases with connection strings"))
+    opts.add_option('-a', '--add', action="store", type="string",
+                    dest="add", metavar="alias", default=False,
+                    help="add new alias for connection string")
+    opts.add_option('-g', '--group', action="store", type="string",
+                    dest="group", metavar="group", default=False,
+                    help="add new group for aliases")
+    opts.add_option('-c', '--command', action="store", type="string",
+                    dest="command", metavar="command", default=False,
+                    help="execute command for aliases or group")
+    opts.add_option('-k', '--keep', action="store", type="string",
+                    dest="keep", metavar="alias", default=False,
+                    help="hold connection with specified alias")
+    opts.add_option('-e', '--edit', action="store", type="string",
+                    dest='edit', metavar="alias", default=False,
+                    help="edit existing alias or group")
+    opts.add_option('-p', '--password', action="store", type="string",
+                    dest='password', metavar="alias", default=False,
+                    help="set and store password for sshpass [UNSAFE]")
+    opts.add_option('-r', '--remove', action="store", type="string",
+                    dest='remove', metavar="alias", default=False,
+                    help="remove existing alias or group")
+    options, alias = opts.parse_args()
+    if options.add:
+        CMDAdd(options.add)
+    if options.group:
+        CMDGroup(options.group)
+    if options.edit:
+        CMDEdit(options.edit)
+    if options.password:
+        CMDPassword(options.password)
+    if options.remove:
+        CMDRemove(options.remove)
+    if options.keep:
+        HoldConnection(options.keep)
+    if alias:
+        CMDConnect(alias, options.command)
+
+# curses template from: https://stackoverflow.com/a/30828805/6224462
+
+
+def CursesMain():
+    help_screen = ("".join([" Press:\n",
+                            "  'z'/'x' or arrows - navigation\n",
+                            "  'a'/'F2' - add new alias (without spaces)\n",
+                            "  'g'/'F5' - add new group (spaces will be stripped)\n",
+                            "  'e'/'F4' - edit existing alias/group\n",
+                            "  'p'/'F6' - set alias's password for sshpass [UNSAFE]\n",
+                            "  'space'/'insert' - select\n",
+                            "  'r'/'F8' - remove selected alias/aliases\n",
+                            "  'c'/'F3' - execute specific command with selected alias/aliases\n",
+                            "  'k'/'F7' - hold connection with selected alias\n",
+                            "  'enter'/'F9' - connect to selected alias/aliases,\n",
+                            "                 expand/collapse group\n",
+                            "  'q'/'F10' - quit\n",
+                            " Run program with '--help' option to view command line help.\n",
+                            " Also, you can edit config file manually:\n",
+                            "  ", conf_file]))
+    if expand_default == True:
+        groups = []
+        for a in conf.sections():
+            if conf.has_option(a, "group"):
+                groups.append(a)
+        expanded = groups
+        strings = GetTreeList(False, expanded)
+        stringsfull = GetTreeList(True, expanded)
+    elif expand_default == False:
+        groups = []
+        expanded = groups
+        strings = GetTreeList(False, expanded)
+        stringsfull = GetTreeList(True, expanded)
+    row_num = len(strings)
+    selected_strings = [" " for i in range(0, row_num + 1)]
+    screen = curses.initscr()
+    curses.noecho()
+    curses.cbreak()
+    curses.start_color()
+    screen.keypad(1)
+    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    highlight_text = curses.color_pair(1)
+    normal_text = curses.A_NORMAL
+    height, width = screen.getmaxyx()
+    screen.border(0)
+    curses.curs_set(0)
+    max_row = height - 5
+    screen.addnstr(1, 2, "sshch " + version + ", press 'h' for help",
+                   width - 4)
+    box = curses.newwin(max_row + 2, width - 2, 2, 1)
+    box.box()
+    pages = int(ceil(row_num / max_row))
+    position = 1
+    page = 1
+    for i in range(1, max_row + 1):
+        if row_num == 0:
+            box.addnstr(1, 1, "There aren't any aliases yet. Press 'a' to add new one.",
+                        width - 6, highlight_text)
+        else:
+            exec_string = ["[", selected_strings[i], "] ", stringsfull[i - 1]]
+            if (i == position):
+                box.addnstr(i, 2, "".join(exec_string), width - 6, highlight_text)
+            else:
+                box.addnstr(i, 2, "".join(exec_string), width - 6, normal_text)
+            if i == row_num:
+                break
+    screen.refresh()
+    box.refresh()
+    key_pressed = screen.getch()
+    while True:
+        if key_pressed == ord('q') or key_pressed == ord(
+            'Q') or key_pressed == (
+                27) or key_pressed == curses.KEY_F10:
+            CursesExit()
+        if key_pressed == ord('h') or key_pressed == ord(
+                'H') or key_pressed == curses.KEY_F1:
+            CursesPanel(screen, height - 4, width - 6, 2, 3,
+                        help_screen, normal_text, highlight_text)
+        if key_pressed == ord('a') or key_pressed == ord(
+                'A') or key_pressed == curses.KEY_F2:
+            curses.curs_set(1)
+            new_alias_textpad = CursesTextpad(screen, 1, width - 8,
+                                              (height // 2) - 1, 4, "Enter new alias:", "",
+                                              normal_text, highlight_text)
+            add_alias = new_alias_textpad.edit(CursesTextpadConfirm)
+            add_alias = add_alias.split()[0].strip()
+            if not add_alias == "":
+                add_result = AddNewAlias(add_alias)
+                if add_result == True:
+                    add_string = ""
+                    while add_string == "":
+                        string_textpad = CursesTextpad(screen, 3,
+                                                       width - 8, (height // 2) - 1, 4,
+                                                       "Enter full execution string:",
+                                                       "ssh ", normal_text, highlight_text)
+                        add_string = string_textpad.edit(
+                            CursesTextpadConfirm)
+                    SetAliasString(add_alias,
+                                   add_string.replace("\n", "").rstrip())
+                    strings = GetTreeList(False, expanded)
+                    stringsfull = GetTreeList(True, expanded)
+                    row_num = len(strings)
+                    selected_strings.append(" ")
+                    pages = int(ceil(row_num / max_row))
+                    box.refresh()
+                else:
+                    curses.curs_set(0)
+                    CursesPanel(screen, 3,
+                                width - 6, (height // 2) - 1, 3, add_result,
+                                normal_text, highlight_text)
+            curses.curs_set(0)
+        if key_pressed == ord('g') or key_pressed == ord(
+                'G') or key_pressed == curses.KEY_F5:
+            curses.curs_set(1)
+            new_group_textpad = CursesTextpad(screen, 1, width - 8,
+                                              (height // 2) - 1, 4, "Enter group name (without spaces):", "",
+                                              normal_text, highlight_text)
+            add_group = new_group_textpad.edit(CursesTextpadConfirm)
+            add_group = add_group.split()[0].strip()
+            if not add_group == "":
+                add_result = AddNewAlias(add_group)
+                if add_result == True:
+                    add_string = ""
+                    while add_string.rstrip() == "":
+                        string_textpad = CursesTextpad(screen, 3,
+                                                       width - 8, (height // 2) - 1, 4,
+                                                       "Enter aliases for new group (example: alias1 alias2):",
+                                                       "", normal_text, highlight_text)
+                        add_string = string_textpad.edit(
+                            CursesTextpadConfirm)
+                    SetGroupString(add_group,
+                                   add_string.replace("\n", "").rstrip())
+                    expanded.append(add_group)
+                    strings = GetTreeList(False, expanded)
+                    stringsfull = GetTreeList(True, expanded)
+                    row_num = len(strings)
+                    selected_strings = [" " for i in range(0, row_num + 1)]
+                    pages = int(ceil(row_num / max_row))
+                    box.refresh()
+                else:
+                    curses.curs_set(0)
+                    CursesPanel(screen, 3,
+                                width - 6, (height // 2) - 1, 3, add_result,
+                                normal_text, highlight_text)
+            curses.curs_set(0)
+        if (key_pressed == ord('e') or key_pressed == ord(
+                'E') or key_pressed == curses.KEY_F4) and row_num != 0:
+            edit_string = ""
+            groups = []
+            for a in conf.sections():
+                if conf.has_option(a, "group"):
+                    groups.append(a)
+            curses.curs_set(1)
+            if strings[position - 1] in groups:
+                while edit_string.rstrip() == "":
+                    string_textpad = CursesTextpad(screen, 3, width - 8,
+                                                   (height // 2) - 1, 4, "Enter new aliases for existing group:",
+                                                   (conf.get(strings[position - 1],
+                                                   "group") if conf.has_option(strings[position - 1],
+                                                   "group") else ""),
+                                                   normal_text, highlight_text)
+                    edit_string = string_textpad.edit(CursesTextpadConfirm)
+                SetGroupString(strings[position - 1],
+                               edit_string.replace("\n", "").rstrip())
+                strings = GetTreeList(False, expanded)
+                stringsfull = GetTreeList(True, expanded)
+                row_num = len(strings)
+                selected_strings.append(" ")
+                pages = int(ceil(row_num / max_row))
+                box.refresh()
+            else:
+                while edit_string.rstrip() == "":
+                    string_textpad = CursesTextpad(screen, 3, width - 8,
+                                                   (height // 2) - 1, 4, "Enter new execution string:",
+                                                   (conf.get(strings[position - 1].split()[0].strip(),
+                                                   "exec_string") if conf.has_option(strings[position - 1].split()[0].strip(),
+                                                   "exec_string") else ""),
+                                                   normal_text, highlight_text)
+                    edit_string = string_textpad.edit(CursesTextpadConfirm)
+                SetAliasString(strings[position - 1].split()[0].strip(),
+                               edit_string.replace("\n", "").rstrip())
+                strings = GetTreeList(False, expanded)
+                stringsfull = GetTreeList(True, expanded)
+            curses.curs_set(0)
+        if (key_pressed == ord('p') or key_pressed == ord(
+                'P') or key_pressed == curses.KEY_F6) and row_num != 0:
+            groups = []
+            for a in conf.sections():
+                if conf.has_option(a, "group"):
+                    groups.append(a)
+            if not strings[position - 1].split()[0].strip() in groups:
+                set_password = ""
+                set_password = CursesPanel(screen, 4, width - 6,
+                                           (height // 2) - 1, 3,
+                                           " Enter user password for sshpass and press 'enter':\n>",
+                                           normal_text, highlight_text, "password")
+                SetPassword(strings[position - 1].split()[0].strip(), set_password)
+                strings = GetTreeList(False, expanded)
+                stringsfull = GetTreeList(True, expanded)
+        if (key_pressed == ord('r') or key_pressed == ord(
+                'R') or key_pressed == curses.KEY_F8 or key_pressed == (
+                curses.KEY_DC)) and row_num != 0:
+            selected = []
+            for i in range(1, row_num + 1):
+                if selected_strings[i] == "*":
+                    selected.append(strings[i - 1])
+            if len(selected) > 0:
+                remove_confirm = (
+                    "".join(["Are you sure to remove ",
+                             str(len(selected)), " selected aliases? (y/N)"]))
+            else:
+                remove_confirm = ("".join(["Are you sure to remove '",
+                                           strings[position - 1].split()[0].strip(), "' alias? (y/N)"]))
+                selected.append(strings[position - 1].split()[0].strip())
+            remove_result = CursesPanel(screen, 4, width - 6,
+                                        (height // 2) - 1, 3, remove_confirm, normal_text,
+                                        highlight_text, "remove")
+            if remove_result == "confirm":
+                RemoveAliases(selected)
+                strings = GetTreeList(False, expanded)
+                stringsfull = GetTreeList(True, expanded)
+                row_num = len(strings)
+                selected_strings = [" " for i in range(0, row_num + 1)]
+                pages = int(ceil(row_num / max_row))
+                position = 1
+                page = 1
+                box.refresh()
+        if (key_pressed == ord('c') or key_pressed == ord(
+                'C') or key_pressed == curses.KEY_F3) and row_num != 0:
+            selected = []
+            for i in range(1, row_num + 1):
+                if selected_strings[i] == "*":
+                    selected.append(strings[i - 1])
+            if not len(selected) > 0:
+                selected.append(strings[position - 1].split()[0].strip())
+            curses.curs_set(1)
+            command_textpad = CursesTextpad(screen, 3, width - 8,
+                                            (height // 2) - 1, 4,
+                                            "".join([
+                                                "Enter specific command to execute with selected ",
+                                                "alias/aliases:"]
+                                            ), "", normal_text, highlight_text)
+            command_string = command_textpad.edit(CursesTextpadConfirm)
+            CursesConnect(screen, selected,
+                          command_string.replace("\n", "").rstrip())
+            curses.curs_set(0)
+        if (key_pressed == ord('k') or key_pressed == ord('K') or
+                key_pressed == (curses.KEY_F7)) and row_num != 0:
+            groups = []
+            for a in conf.sections():
+                if conf.has_option(a, "group"):
+                    groups.append(a)
+            if not strings[position - 1] in groups:
+                curses.endwin()
+                HoldConnection(strings[position - 1].split()[0].strip())
+        if (key_pressed == ord("\n") or key_pressed == (
+                curses.KEY_F9)) and row_num != 0:
+            groups = []
+            for a in conf.sections():
+                if conf.has_option(a, "group"):
+                    groups.append(a)
+            if strings[position - 1] in groups:
+                if strings[position - 1] in expanded:
+                    expanded.remove(strings[position - 1])
+                else:
+                    expanded.append(strings[position - 1])
+                strings = GetTreeList(False, expanded)
+                stringsfull = GetTreeList(True, expanded)
+                row_num = len(strings)
+                selected_strings.append(" ")
+                pages = int(ceil(row_num / max_row))
+                box.refresh()
+            else:
+                selected = []
+                for i in range(1, row_num + 1):
+                    if selected_strings[i] == "*":
+                        selected.append(strings[i - 1])
+                if not len(selected) > 0:
+                    selected.append(strings[position - 1].split()[0].strip())
+                CursesConnect(screen, selected)
+            selected_strings = [" " for i in range(0, row_num + 1)]
+        if (key_pressed == 32 or key_pressed == (
+                curses.KEY_IC)) and row_num != 0:
+            if selected_strings[position] == ' ':
+                selected_strings[position] = '*'
+            else:
+                selected_strings[position] = ' '
+            if page == 1:
+                if position < i:
+                    position = position + 1
+                else:
+                    if pages > 1:
+                        page = page + 1
+                        position = 1 + (max_row * (page - 1))
+            elif page == pages:
+                if position < row_num:
+                    position = position + 1
+            else:
+                if position < max_row + (max_row * (page - 1)):
+                    position = position + 1
+                else:
+                    page = page + 1
+                    position = 1 + (max_row * (page - 1))
+        if key_pressed == curses.KEY_DOWN or key_pressed == ord(
+                'x') or key_pressed == ord('X'):
+            if page == 1:
+                if position < i:
+                    position = position + 1
+                else:
+                    if pages > 1:
+                        page = page + 1
+                        position = 1 + (max_row * (page - 1))
+            elif page == pages:
+                if position < row_num:
+                    position = position + 1
+            else:
+                if position < max_row + (max_row * (page - 1)):
+                    position = position + 1
+                else:
+                    page = page + 1
+                    position = 1 + (max_row * (page - 1))
+        if key_pressed == curses.KEY_UP or key_pressed == ord(
+                'z') or key_pressed == ord('Z'):
+            if page == 1:
+                if position > 1:
+                    position = position - 1
+            else:
+                if position > (1 + (max_row * (page - 1))):
+                    position = position - 1
+                else:
+                    page = page - 1
+                    position = max_row + (max_row * (page - 1))
+        if key_pressed == curses.KEY_LEFT or (key_pressed ==
+                                              curses.KEY_PPAGE):
+            if page > 1:
+                page = page - 1
+                position = 1 + (max_row * (page - 1))
+        if key_pressed == curses.KEY_RIGHT or (key_pressed ==
+                                               curses.KEY_NPAGE):
+            if page < pages:
+                page = page + 1
+                position = (1 + (max_row * (page - 1)))
+        if key_pressed == curses.KEY_HOME:
+                page = 1
+                position = 1
+        if key_pressed == curses.KEY_END:
+                page = pages
+                position = row_num
+        box.erase()
+        screen.border(0)
+        box.border(0)
+        for i in range(1 + (max_row * (page - 1)), max_row + 1 +
+                       (max_row * (page - 1))):
+            if row_num == 0:
+                box.addnstr(1, 1, "There aren't any aliases yet. Press 'a' to add new one.",
+                            width - 6, highlight_text)
+            else:
+                exec_string = ["[", selected_strings[i], "] ", stringsfull[i - 1]]
+                if (i + (max_row * (page - 1)) == (position + (max_row * (page - 1)))):
+                    box.addnstr(i - (max_row * (page - 1)), 2, "".join(
+                        exec_string), width - 6, highlight_text)
+                else:
+                    box.addnstr(i - (max_row * (page - 1)), 2, "".join(
+                        exec_string), width - 6, normal_text)
+                if i == row_num:
+                    break
+        screen.refresh()
+        box.refresh()
+        key_pressed = screen.getch()
+    CursesExit()
+
+
+if __name__ == "__main__":
+    try:
+        input = raw_input   # Fix for Python 2.x
+    except NameError:
+        pass
+
+    conf = configparser.RawConfigParser()
+    if not path.exists(conf_file):
+        open(conf_file, 'w')
+    conf.read(conf_file)
+    if len(argv) > 1:
+        try:
+            CMDOptions()
+        except KeyboardInterrupt:
+            exit()
+        except configparser.Error:
+            print("Error: can't parse your config file, please check it manually or make new one")
+            exit()
+    else:
+        try:
+            CursesMain()
+        except KeyboardInterrupt:
+            CursesExit()
+        except configparser.NoOptionError:
+            CursesExit("".join(["Error: can't parse your config file, please ",
+                       "check it manually or make new one"]))
+        except curses.error:
+            CursesExit("".join(["Error: can't show some curses element, maybe ",
+                       "your terminal is too small"]))
